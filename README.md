@@ -1,78 +1,69 @@
 # AirClip
 
-AirClip is a Bluetooth Low Energy clipboard bridge for trusted Windows machines
-that cannot share a normal network path. It uses an ESP32 as a small relay and a
-Python desktop agent on each PC.
+AirClip 是一个基于 Bluetooth Low Energy（BLE）的剪贴板桥接工具，用于两台可信 Windows 电脑之间没有普通网络通路、但需要同步文本剪贴板的场景。项目使用 ESP32 作为轻量 BLE 中继，每台电脑运行一个 Python 桌面端代理。
 
-The intended topology is:
+典型拓扑：
 
 ```text
-Windows PC A <-> BLE <-> ESP32 relay <-> BLE <-> Windows PC B
+Windows 电脑 A <-> BLE <-> ESP32 中继 <-> BLE <-> Windows 电脑 B
 ```
 
-The ESP32 firmware is intentionally a small BLE relay. Clipboard history,
-deduplication, enable/disable controls, and loop prevention live in the desktop
-agent.
+ESP32 固件只负责 BLE 广播、接收和转发。剪贴板历史、去重、启停控制、回环防护等逻辑都放在 Windows 桌面端代理中。
 
-## Features
+## 功能特性
 
-- ESP32 relay firmware built with Arduino and `NimBLE-Arduino`.
-- Windows-oriented Python desktop agent with console and tray controls.
-- Bidirectional text clipboard synchronization while preserving plain-text
-  formatting such as line breaks, indentation, tabs, and Unicode characters.
-- Local clipboard history capped at 50 entries by default.
-- Runtime enable/disable control from the desktop tray menu or agent console.
-- Chunked BLE protocol so clipboard text can exceed a single packet.
+- 基于 Arduino 和 `NimBLE-Arduino` 的 ESP32 中继固件。
+- 面向 Windows 的 Python 桌面端代理，支持控制台和托盘菜单。
+- 双向同步文本剪贴板，保留换行、缩进、制表符和 Unicode 字符。
+- 本地剪贴板历史默认最多保留 50 条。
+- 支持运行时从托盘菜单或控制台启用、暂停、清空历史和退出。
+- 使用分块 BLE 协议，剪贴板文本可以超过单个 BLE 包长度。
 
-Images, files, and rich text styles from Word or browsers are deliberately out
-of scope for the first version because they are large, privacy-sensitive, and
-unreliable over a low-bandwidth Bluetooth link.
+当前版本只同步纯文本。图片、文件、Word/浏览器富文本样式等暂不支持，因为这些内容体积大、隐私风险高，并且不适合低带宽蓝牙链路。
 
-## Repository Layout
+## 项目结构
 
 ```text
-desktop-agent/                 Python desktop clipboard agent
-desktop-agent/airclip_agent/   Agent source code
-desktop-agent/tests/           Desktop agent tests
-firmware/airclip_esp32/        Arduino firmware for the ESP32 relay
-docs/architecture.md           Component overview
-docs/protocol.md               BLE service and message protocol
+desktop-agent/                 Python 桌面端剪贴板代理
+desktop-agent/airclip_agent/   桌面端源码
+desktop-agent/tests/           桌面端测试
+firmware/airclip_esp32/        ESP32 中继 Arduino 固件
+docs/architecture.md           组件架构说明
+docs/protocol.md               BLE 服务和消息协议
 docs/windows-esp32-s3-runbook.md
 ```
 
-## Requirements
+## 环境要求
 
-- Windows 10 or later for the desktop agent.
-- Python 3.11 or later.
-- An ESP32 board with BLE support. ESP32-S3-N16R8 is the primary tested target.
-- Arduino ESP32 board package.
-- `NimBLE-Arduino` library.
+- Windows 10 或更高版本。
+- Python 3.11 或更高版本。
+- 支持 BLE 的 ESP32 开发板，主要测试目标是 ESP32-S3-N16R8。
+- Arduino ESP32 board package。
+- `NimBLE-Arduino` 库。
 
-## Quick Start
+## 快速开始
 
-### 1. Flash the ESP32 Relay
+### 1. 烧录 ESP32 中继
 
-1. Install the Arduino ESP32 board package.
-2. Install the `NimBLE-Arduino` library.
-3. Open `firmware/airclip_esp32/airclip_esp32.ino` in Arduino IDE.
-4. Select an ESP32-S3 board profile that matches ESP32-S3-N16R8 and upload.
+1. 安装 Arduino ESP32 board package。
+2. 安装 `NimBLE-Arduino` 库。
+3. 在 Arduino IDE 中打开 `firmware/airclip_esp32/airclip_esp32.ino`。
+4. 选择匹配 ESP32-S3-N16R8 的 ESP32-S3 开发板配置并上传。
 
-The device advertises as `AirClip-Relay`.
+设备会以 `AirClip-Relay` 名称进行 BLE 广播。
 
-### 2. Install the Desktop Agent
+### 2. 安装桌面端代理
 
-The easiest path on a new Windows PC is the installer:
+新 Windows 电脑上推荐使用安装脚本：
 
 ```powershell
 cd desktop-agent
 .\install.cmd
 ```
 
-The installer creates the local virtual environment, installs dependencies,
-adds shortcuts that launch `AirClipAgent.exe`, optionally enables startup
-launch, and starts the agent once after installation.
+安装脚本会创建本地虚拟环境、安装依赖、添加启动 `AirClipAgent.exe` 的快捷方式，并可选择启用开机自启。安装完成后会启动一次代理。
 
-If you want a manual run instead:
+如果只想手动运行：
 
 ```powershell
 cd desktop-agent
@@ -82,22 +73,19 @@ python -m pip install -e .
 python -m airclip_agent --name pc-a
 ```
 
-Console commands while running:
+运行时控制台命令：
 
-- `on` enables sharing.
-- `off` disables sharing.
-- `history` prints the recent text clipboard entries.
-- `clear` clears the local history.
-- `quit` exits.
+- `on`：启用共享。
+- `off`：暂停共享。
+- `history`：打印最近的文本剪贴板历史。
+- `clear`：清空本地历史。
+- `quit`：退出代理。
 
-The tray icon exposes the same enable, pause, clear-history, and exit controls.
-Use `--no-tray` when running in a console-only environment.
-Use `--no-console` when launching from a shortcut or startup entry.
-The tray menu also has a `查看历史` item that opens the recent clipboard queue.
+托盘图标提供同样的启用、暂停、清空历史和退出控制。控制台环境可以使用 `--no-tray` 禁用托盘；快捷方式或开机自启场景可以使用 `--no-console` 隐藏控制台。托盘菜单中的 `查看历史` 会打开最近剪贴板队列窗口。
 
-## Development
+## 开发
 
-Install development dependencies and run tests:
+安装开发依赖并运行测试：
 
 ```powershell
 cd desktop-agent
@@ -108,37 +96,28 @@ python -m pip install -e .[dev]
 pytest
 ```
 
-The Python package metadata lives in `desktop-agent/pyproject.toml`. The legacy
-`requirements.txt` is kept for the Windows installer and simple manual installs.
+Python 包元数据位于 `desktop-agent/pyproject.toml`。`requirements.txt` 保留给 Windows 安装脚本和简单手动安装流程使用。
 
-## Documentation
+## 文档
 
-- [Architecture](docs/architecture.md)
-- [BLE protocol](docs/protocol.md)
-- [Windows and ESP32-S3 runbook](docs/windows-esp32-s3-runbook.md)
+- [架构说明](docs/architecture.md)
+- [BLE 协议](docs/protocol.md)
+- [Windows 与 ESP32-S3 运行手册](docs/windows-esp32-s3-runbook.md)
 
-## Uninstall
-
-To remove the desktop agent:
+## 卸载
 
 ```powershell
 cd desktop-agent
 .\uninstall.cmd
 ```
 
-## Security Notes
+## 安全说明
 
-- Keep the two computer names unique. They are used to prevent clipboard echo
-  loops.
-- The current implementation does not persist clipboard history to disk, so
-  sensitive clipboard contents are not written by default.
-- Treat clipboard data as sensitive. Avoid syncing passwords, tokens, private
-  keys, production credentials, or data from untrusted machines.
-- ESP32-S3-N16R8 has enough memory for this relay design. If the host BLE stack
-  cannot maintain two simultaneous connections in practice, the firmware can
-  still be reused, but the connection strategy will need to change to a polling
-  or reconnect model.
+- 两台电脑的名称应保持唯一，代理会用名称防止剪贴板回环。
+- 剪贴板内容可能包含敏感信息。不要同步密码、令牌、私钥、生产凭据或来自不可信机器的数据。
+- 当前实现会保留本地剪贴板历史队列，但不会把历史作为跨设备共享状态。
+- ESP32-S3-N16R8 的内存足够支撑当前中继设计。如果宿主 BLE 栈无法稳定维持两个同时连接，固件仍可复用，但连接策略需要改为轮询或重连模型。
 
-## License
+## 许可证
 
-AirClip is released under the [MIT License](LICENSE).
+AirClip 使用 [MIT License](LICENSE) 发布。
